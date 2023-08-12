@@ -44,7 +44,7 @@ def clone_and_copy_repository(repo_url):
     destination_path = Path.cwd() / personalities_folder
 
     # Copy files and folders recursively
-    print(f"copying")
+    print("copying")
     copy_files(subfolder_path, destination_path)
 
     # Remove the temporary folder

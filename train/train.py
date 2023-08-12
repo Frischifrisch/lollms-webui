@@ -15,7 +15,7 @@ import wandb
 torch.backends.cuda.matmul.allow_tf32 = True
 
 def format_metrics(metrics, split, prefix=""):
-    log = f"[{split}]" + prefix
+    log = f"[{split}]{prefix}"
     log += " ".join([f"{key}: {value:.4f}" for key, value in metrics.items()])
 
     return log
@@ -47,15 +47,15 @@ def train(accelerator, config):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-        
+
     with accelerator.main_process_first():
         train_dataloader, val_dataloader = load_data(config, tokenizer) 
 
 
     checkpoint = config["gradient_checkpointing"]
-    model = AutoModelForCausalLM.from_pretrained(config["model_name"], 
-                                                    use_cache=False if checkpoint else True,
-                                                    trust_remote_code=True) 
+    model = AutoModelForCausalLM.from_pretrained(
+        config["model_name"], use_cache=not checkpoint, trust_remote_code=True
+    )
     if checkpoint:
         model.gradient_checkpointing_enable()
 
@@ -171,7 +171,7 @@ def train(accelerator, config):
 
                 if config["wandb"]:
                     curr_step = step + epoch * len(train_dataloader)
-                    accelerator.log({**log_train, **log_val}, step=curr_step)
+                    accelerator.log(log_train | log_val, step=curr_step)
 
                 accelerator.print(f"Current LR: {scheduler.get_last_lr()[0]}")
                 accelerator.print(format_metrics(log_train, "train", f" step {step} "))
@@ -180,7 +180,7 @@ def train(accelerator, config):
                 train_loss.reset()
 
         accelerator.print(f"Epoch {epoch} finished")
-        accelerator.print(f"Pushing to HF hub")
+        accelerator.print("Pushing to HF hub")
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
         try:
@@ -189,7 +189,7 @@ def train(accelerator, config):
 
         except Exception as e:
             accelerator.print(e)
-            accelerator.print(f"Failed to push to hub")
+            accelerator.print("Failed to push to hub")
 
         unwrapped_model.save_pretrained(
             f"{config['output_dir']}/epoch_{epoch}",
@@ -197,7 +197,7 @@ def train(accelerator, config):
             save_function=accelerator.save,
             state_dict=accelerator.get_state_dict(model),
         )
-            
+
     accelerator.wait_for_everyone()
     unwrapped_model = accelerator.unwrap_model(model)
     unwrapped_model.save_pretrained(

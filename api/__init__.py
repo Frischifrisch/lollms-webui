@@ -98,12 +98,10 @@ def parse_requirements_file(requirements_path):
             if is_package_installed(package_name):
                 # The package is already installed
                 print(f"{package_name} is already installed.")
+            elif version_specifier:
+                install_package(f"{package_name}{version_specifier}")
             else:
-                # The package is not installed, install it
-                if version_specifier:
-                    install_package(f"{package_name}{version_specifier}")
-                else:
-                    install_package(package_name)
+                install_package(package_name)
 
 
 # ===========================================================
@@ -114,8 +112,8 @@ class LoLLMsAPPI(LollmsApplication):
 
         super().__init__("Lollms_webui",config, lollms_paths, callback=self.process_chunk)
         self.is_ready = True
-        
-        
+
+
         self.socketio = socketio
         self.config_file_path = config_file_path
         self.cancel_gen = False
@@ -141,7 +139,7 @@ class LoLLMsAPPI(LollmsApplication):
 
         # This is used to keep track of messages 
         self.download_infos={}
-        
+
         self.connections = {0:{
                 "current_discussion":None,
                 "generated_text":"",
@@ -151,7 +149,7 @@ class LoLLMsAPPI(LollmsApplication):
                 "schedule_for_deletion":False
             }
         }
-        
+
         # =========================================================================================
         # Socket IO stuff    
         # =========================================================================================
@@ -179,10 +177,10 @@ class LoLLMsAPPI(LollmsApplication):
                     del self.connections[request.sid]
             except Exception as ex:
                 pass
-            
+
             ASCIIColors.error(f'Client {request.sid} disconnected')
 
-        
+
         @socketio.on('cancel_install')
         def cancel_install(data):
             try:
@@ -208,7 +206,7 @@ class LoLLMsAPPI(LollmsApplication):
         @socketio.on('install_model')
         def install_model(data):
             room_id = request.sid            
-                     
+
             def install_model_():
                 print("Install model triggered")
                 model_path = data["path"]
@@ -231,7 +229,7 @@ class LoLLMsAPPI(LollmsApplication):
                     "speed":0,
                     "cancel":False
                 }
-                
+
                 if installation_path.exists():
                     print("Error: Model already exists")
                     socketio.emit('install_progress',{
@@ -247,7 +245,7 @@ class LoLLMsAPPI(LollmsApplication):
                                                         'speed': self.download_infos[signature]['speed'],
                                                     }, room=room_id
                                 )
-                
+
                 socketio.emit('install_progress',{
                                                 'status': True,
                                                 'progress': progress,
@@ -261,7 +259,7 @@ class LoLLMsAPPI(LollmsApplication):
                                                 'speed': self.download_infos[signature]['speed'],
 
                                                 }, room=room_id)
-                
+
                 def callback(downloaded_size, total_size):
                     progress = (downloaded_size / total_size) * 100
                     now = datetime.now()
@@ -283,11 +281,11 @@ class LoLLMsAPPI(LollmsApplication):
                                                         'progress': self.download_infos[signature]['progress'],
                                                         'speed': self.download_infos[signature]['speed'],
                                                         }, room=room_id)
-                    
+
                     if self.download_infos[signature]["cancel"]:
                         raise Exception("canceled")
-                        
-                    
+
+
                 if hasattr(self.binding, "download_model"):
                     try:
                         self.binding.download_model(model_path, installation_path, callback)
@@ -347,7 +345,7 @@ class LoLLMsAPPI(LollmsApplication):
                                                 'speed': self.download_infos[signature]['speed'],
                                                 }, room=room_id)
                 del self.download_infos[signature]
-                
+
             tpe = threading.Thread(target=install_model_, args=())
             tpe.start()
 
@@ -357,7 +355,7 @@ class LoLLMsAPPI(LollmsApplication):
             installation_dir = self.lollms_paths.personal_models_path/self.config["binding_name"]
             filename = Path(model_path).name
             installation_path = installation_dir / filename
-            
+
             model_name = filename
             binding_folder = self.config["binding_name"]
 
@@ -392,11 +390,11 @@ class LoLLMsAPPI(LollmsApplication):
             self.connections[client_id]["current_discussion"] = self.db.create_discussion(title)
             # Get the current timestamp
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
+
             # Return a success response
             if self.connections[client_id]["current_discussion"] is None:
                 self.connections[client_id]["current_discussion"] = self.db.load_last_discussion()
-        
+
             if self.personality.welcome_message!="":
                 message = self.connections[client_id]["current_discussion"].add_message(
                     message_type        = MSG_TYPE.MSG_TYPE_FULL.value if self.personality.include_welcome_message_in_disucssion else MSG_TYPE.MSG_TYPE_FULL_INVISIBLE_TO_AI.value,
@@ -412,7 +410,7 @@ class LoLLMsAPPI(LollmsApplication):
                     created_at=None, 
                     finished_generating_at=None
                 )
- 
+
                 self.socketio.emit('discussion_created',
                             {'id':self.connections[client_id]["current_discussion"].discussion_id},
                             room=client_id
@@ -451,7 +449,7 @@ class LoLLMsAPPI(LollmsApplication):
             save_path = self.lollms_paths.personal_uploads_path/filename  # Specify the desired folder path
 
             try:
-                if not self.personality.processor is None:
+                if self.personality.processor is not None:
                     self.personality.processor.add_file(save_path, partial(self.process_chunk, client_id = request.sid))
                     file.save(save_path)
                     # File saved successfully
@@ -463,7 +461,7 @@ class LoLLMsAPPI(LollmsApplication):
             except Exception as e:
                 # Error occurred while saving the file
                 socketio.emit('progress', {'status':False, 'error': str(e)})
-            
+
         @socketio.on('cancel_generation')
         def cancel_generation():
             client_id = request.sid
@@ -479,7 +477,7 @@ class LoLLMsAPPI(LollmsApplication):
             client_id = request.sid
             self.connections[client_id]["generated_text"]       = ""
             self.connections[client_id]["cancel_generation"]    = False
-            
+
             try:
                 self.personality.setCallback(partial(self.process_chunk,client_id = client_id))
                 ASCIIColors.info("Recovering file from front end")
@@ -490,32 +488,34 @@ class LoLLMsAPPI(LollmsApplication):
                 File64BitsManager.b642file(data["fileData"],file_path)
                 if self.personality.processor:
                     self.personality.processor.add_file(file_path, partial(self.process_chunk, client_id=client_id))
-                    
+
                 self.socketio.emit('file_received',
                         {
                             "status":True,
                         }, room=client_id
-                )    
+                )
             except Exception as ex:
                 ASCIIColors.error(ex)
                 trace_exception(ex)
-                self.socketio.emit('file_received',
-                        {
-                            "status":False,
-                            "error":"Couldn't receive file: "+str(ex)
-                        }, room=client_id
+                self.socketio.emit(
+                    'file_received',
+                    {
+                        "status": False,
+                        "error": f"Couldn't receive file: {str(ex)}",
+                    },
+                    room=client_id,
                 )    
-        
+
         @socketio.on('generate_msg')
         def generate_msg(data):
             client_id = request.sid
             self.connections[client_id]["generated_text"]=""
             self.connections[client_id]["cancel_generation"]=False
-            
+
             if not self.model:
                 self.notify("Model not selected. Please select a model", False, client_id)
                 return
- 
+
             if self.is_ready:
                 if self.connections[client_id]["current_discussion"] is None:
                     if self.db.does_last_discussion_have_messages():
@@ -534,14 +534,14 @@ class LoLLMsAPPI(LollmsApplication):
                     parent_message_id=self.message_id
                 )
 
-                ASCIIColors.green("Starting message generation by "+self.personality.name)
+                ASCIIColors.green(f"Starting message generation by {self.personality.name}")
                 self.connections[client_id]['generation_thread'] = threading.Thread(target=self.start_message_generation, args=(message, message.id, client_id))
                 self.connections[client_id]['generation_thread'].start()
-                
+
                 self.socketio.sleep(0.01)
                 ASCIIColors.info("Started generation task")
-                #tpe = threading.Thread(target=self.start_message_generation, args=(message, message_id, client_id))
-                #tpe.start()
+                        #tpe = threading.Thread(target=self.start_message_generation, args=(message, message_id, client_id))
+                        #tpe.start()
             else:
                 self.notify("I am buzzy. Come back later.", False, client_id)
 
@@ -564,7 +564,7 @@ class LoLLMsAPPI(LollmsApplication):
 
         # generation status
         self.generating=False
-        ASCIIColors.blue(f"Your personal data is stored here :",end="")
+        ASCIIColors.blue("Your personal data is stored here :", end="")
         ASCIIColors.green(f"{self.lollms_paths.personal_path}")
 
 
@@ -586,7 +586,7 @@ class LoLLMsAPPI(LollmsApplication):
 
         # generation status
         self.generating=False
-        ASCIIColors.blue(f"Your personal data is stored here :",end="")
+        ASCIIColors.blue("Your personal data is stored here :", end="")
         ASCIIColors.green(f"{self.lollms_paths.personal_path}")
 
 
@@ -597,9 +597,9 @@ class LoLLMsAPPI(LollmsApplication):
         loaded = self.mounted_personalities
         loaded_names = [f"{p.language}/{p.category}/{p.personality_folder_name}" for p in loaded]
         mounted_personalities=[]
-        ASCIIColors.success(f" ╔══════════════════════════════════════════════════╗ ")
-        ASCIIColors.success(f" ║           Building mounted Personalities         ║ ")
-        ASCIIColors.success(f" ╚══════════════════════════════════════════════════╝ ")
+        ASCIIColors.success(" ╔══════════════════════════════════════════════════╗ ")
+        ASCIIColors.success(" ║           Building mounted Personalities         ║ ")
+        ASCIIColors.success(" ╚══════════════════════════════════════════════════╝ ")
         to_remove=[]
         for i,personality in enumerate(self.config['personalities']):
             if i==self.config["active_personality_id"]:
@@ -635,7 +635,7 @@ class LoLLMsAPPI(LollmsApplication):
                     except Exception as ex:
                         ASCIIColors.error(f"Couldn't load personality at {personality_path}")
                         trace_exception(ex)
-                        ASCIIColors.info(f"Unmounting personality")
+                        ASCIIColors.info("Unmounting personality")
                         to_remove.append(i)
                         personality = AIPersonality(None,                                                    self.lollms_paths, 
                                                     self.config, 
@@ -645,9 +645,9 @@ class LoLLMsAPPI(LollmsApplication):
                         mounted_personalities.append(personality)
                         ASCIIColors.info("Reverted to default personality")
         print(f'selected : {self.config["active_personality_id"]}')
-        ASCIIColors.success(f" ╔══════════════════════════════════════════════════╗ ")
-        ASCIIColors.success(f" ║                      Done                        ║ ")
-        ASCIIColors.success(f" ╚══════════════════════════════════════════════════╝ ")
+        ASCIIColors.success(" ╔══════════════════════════════════════════════════╗ ")
+        ASCIIColors.success(" ║                      Done                        ║ ")
+        ASCIIColors.success(" ╚══════════════════════════════════════════════════╝ ")
         # Sort the indices in descending order to ensure correct removal
         to_remove.sort(reverse=True)
 
@@ -660,7 +660,7 @@ class LoLLMsAPPI(LollmsApplication):
 
         if self.config["active_personality_id"]>=len(self.config["personalities"]):
             self.config["active_personality_id"]=0
-            
+
         return mounted_personalities
     # ================================== LOLLMSApp
 
@@ -719,7 +719,7 @@ class LoLLMsAPPI(LollmsApplication):
 
             print("File downloaded successfully")
         except Exception as e:
-            print("Couldn't download file:", str(e))
+            print("Couldn't download file:", e)
 
 
    
@@ -733,12 +733,13 @@ class LoLLMsAPPI(LollmsApplication):
         messages = self.connections[client_id]["current_discussion"].get_messages()
         full_message_list = []
         for i, message in enumerate(messages):
-            if message.id< message_id or (message_id==-1 and i<len(messages)-1): 
-                if message.message_type<=MSG_TYPE.MSG_TYPE_FULL_INVISIBLE_TO_USER.value and message.message_type!=MSG_TYPE.MSG_TYPE_FULL_INVISIBLE_TO_AI.value:
-                    full_message_list.append("\n"+self.config.discussion_prompt_separator+message.sender+": "+message.content.strip())
-            else:
+            if message.id >= message_id and (
+                message_id != -1 or i >= len(messages) - 1
+            ):
                 break
 
+            if message.message_type<=MSG_TYPE.MSG_TYPE_FULL_INVISIBLE_TO_USER.value and message.message_type!=MSG_TYPE.MSG_TYPE_FULL_INVISIBLE_TO_AI.value:
+                full_message_list.append("\n"+self.config.discussion_prompt_separator+message.sender+": "+message.content.strip())
         link_text = "\n" #self.personality.link_text
         if not is_continue:
             full_message_list.append("\n"+self.config.discussion_prompt_separator +message.sender.replace(":","")+": "+message.content.strip()+link_text+self.personality.ai_message_prefix)
@@ -758,7 +759,7 @@ class LoLLMsAPPI(LollmsApplication):
             ASCIIColors.warning(f"Cropping discussion to fit context [using {nb_tk} tokens/{self.config.ctx_size}]")
         discussion_messages = self.personality.personality_conditioning+ composed_messages
         tokens = self.model.tokenize(discussion_messages)
-        
+
         if self.config["debug"]:
             ASCIIColors.yellow(discussion_messages)
             ASCIIColors.yellow(f"prompt size:{len(tokens)} tokens")
@@ -780,12 +781,15 @@ class LoLLMsAPPI(LollmsApplication):
 
         link_text = "\n"# self.personality.link_text
 
-        if len(full_message_list) > self.config["nb_messages_to_remember"]:
-            discussion_messages = self.personality.personality_conditioning+ link_text.join(full_message_list[-self.config["nb_messages_to_remember"]:])
-        else:
-            discussion_messages = self.personality.personality_conditioning+ link_text.join(full_message_list)
-        
-        return discussion_messages # Removes the last return
+        return (
+            self.personality.personality_conditioning
+            + link_text.join(
+                full_message_list[-self.config["nb_messages_to_remember"] :]
+            )
+            if len(full_message_list) > self.config["nb_messages_to_remember"]
+            else self.personality.personality_conditioning
+            + link_text.join(full_message_list)
+        )
 
     def remove_text_from_string(self, string, text_to_find):
         """
