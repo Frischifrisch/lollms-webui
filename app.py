@@ -24,10 +24,7 @@ def run_update_script(args=None):
     update_script = "update_script.py"
 
     # Convert Namespace object to a dictionary
-    if args:
-        args_dict = vars(args)
-    else:
-        args_dict = {}
+    args_dict = vars(args) if args else {}
     # Filter out any key-value pairs where the value is None
     valid_args = {key: value for key, value in args_dict.items() if value is not None}
 
@@ -114,14 +111,12 @@ logging.basicConfig(level=logging.WARNING)
 def get_ip_address():
     # Create a socket object
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    
+
     try:
         # Connect to a remote host (doesn't matter which one)
         sock.connect(('8.8.8.8', 80))
-        
-        # Get the local IP address of the socket
-        ip_address = sock.getsockname()[0]
-        return ip_address
+
+        return sock.getsockname()[0]
     except socket.error:
         return None
     finally:
@@ -527,7 +522,7 @@ class LoLLMsWebUI(LoLLMsAPPI):
             personality_folder = self.lollms_paths.personalities_zoo_path/f"{lang}"/f"{category}"/f"{name}"
         else:
             personality_folder = self.lollms_paths.personal_personalities_path/f"{lang}"/f"{category}"/f"{name}"
-        personality_path = personality_folder/f"config.yaml"
+        personality_path = personality_folder / "config.yaml"
         personality_info = {}
         with open(personality_path) as config_file:
             config_data = yaml.load(config_file, Loader=yaml.FullLoader)
@@ -544,9 +539,9 @@ class LoLLMsWebUI(LoLLMsAPPI):
         jpg_logo_path = assets_path / 'logo.jpg'
         jpeg_logo_path = assets_path / 'logo.jpeg'
         bmp_logo_path = assets_path / 'logo.bmp'
-        
+
         personality_info['has_logo'] = png_logo_path.is_file() or gif_logo_path.is_file()
-        
+
         if gif_logo_path.exists():
             personality_info['avatar'] = str(gif_logo_path).replace("\\","/")
         elif webp_logo_path.exists():
@@ -576,7 +571,7 @@ class LoLLMsWebUI(LoLLMsAPPI):
             self.config["top_k"]=int(data['setting_value'])
         elif setting_name== "top_p":
             self.config["top_p"]=float(data['setting_value'])
-            
+
         elif setting_name== "repeat_penalty":
             self.config["repeat_penalty"]=float(data['setting_value'])
         elif setting_name== "repeat_last_n":
@@ -594,16 +589,22 @@ class LoLLMsWebUI(LoLLMsAPPI):
         elif setting_name== "personality_folder":
             self.personality_name=data['setting_value']
             if len(self.config["personalities"])>0:
-                if self.config["active_personality_id"]<len(self.config["personalities"]):
-                    self.config["personalities"][self.config["active_personality_id"]] = f"{self.personality_language}/{self.personality_category}/{self.personality_name}"
-                else:
+                if self.config["active_personality_id"] >= len(
+                    self.config["personalities"]
+                ):
                     self.config["active_personality_id"] = 0
-                    self.config["personalities"][self.config["active_personality_id"]] = f"{self.personality_language}/{self.personality_category}/{self.personality_name}"
-                
-                if self.personality_category!="Custom":
-                    personality_fn = self.lollms_paths.personalities_zoo_path/self.config["personalities"][self.config["active_personality_id"]]
-                else:
-                    personality_fn = self.lollms_paths.personal_personalities_path/self.config["personalities"][self.config["active_personality_id"]].split("/")[-1]
+                self.config["personalities"][self.config["active_personality_id"]] = f"{self.personality_language}/{self.personality_category}/{self.personality_name}"
+                personality_fn = (
+                    self.lollms_paths.personalities_zoo_path
+                    / self.config["personalities"][
+                        self.config["active_personality_id"]
+                    ]
+                    if self.personality_category != "Custom"
+                    else self.lollms_paths.personal_personalities_path
+                    / self.config["personalities"][
+                        self.config["active_personality_id"]
+                    ].split("/")[-1]
+                )
                 self.personality.load_personality(personality_fn)
             else:
                 self.config["personalities"].append(f"{self.personality_language}/{self.personality_category}/{self.personality_name}")
@@ -654,17 +655,16 @@ class LoLLMsWebUI(LoLLMsAPPI):
                     print(f"Configuration {data['setting_name']} set to {data['setting_value']}")
                 return jsonify({'setting_name': data['setting_name'], "status":True})
 
+        elif data['setting_name'] in self.config.config.keys():
+            self.config[data['setting_name']] = data['setting_value']
         else:
-            if data['setting_name'] in self.config.config.keys():
-                self.config[data['setting_name']] = data['setting_value']
-            else:
-                if self.config["debug"]:
-                    print(f"Configuration {data['setting_name']} couldn't be set to {data['setting_value']}")
-                return jsonify({'setting_name': data['setting_name'], "status":False})
+            if self.config["debug"]:
+                print(f"Configuration {data['setting_name']} couldn't be set to {data['setting_value']}")
+            return jsonify({'setting_name': data['setting_name'], "status":False})
 
         if self.config["debug"]:
             print(f"Configuration {data['setting_name']} set to {data['setting_value']}")
-            
+
         ASCIIColors.success(f"Configuration {data['setting_name']} updated")
         # Tell that the setting was changed
         return jsonify({'setting_name': data['setting_name'], "status":True})
@@ -772,12 +772,11 @@ class LoLLMsWebUI(LoLLMsAPPI):
     
 
     def list_models(self):
-        if self.binding is not None:
-            models = self.binding.list_models(self.config)
-            ASCIIColors.yellow("Listing models")
-            return jsonify(models)
-        else:
+        if self.binding is None:
             return jsonify([])
+        models = self.binding.list_models(self.config)
+        ASCIIColors.yellow("Listing models")
+        return jsonify(models)
     
 
     def list_personalities_languages(self):
@@ -897,10 +896,10 @@ class LoLLMsWebUI(LoLLMsAPPI):
         return send_from_directory(path, fn)
 
     def serve_help(self, filename):
-        root_dir = Path(__file__).parent/f"help"
+        root_dir = Path(__file__).parent / "help"
         root_dir.mkdir(exist_ok=True, parents=True)
         path = str(root_dir/"/".join(filename.split("/")[:-1]))
-                            
+
         fn = filename.split("/")[-1]
         return send_from_directory(path, fn)
 
@@ -976,8 +975,8 @@ class LoLLMsWebUI(LoLLMsAPPI):
     def install_model_from_path(self):
         from tkinter import Tk
         from tkinter.filedialog import askopenfilename
-        
-        ASCIIColors.info(f"- Selecting model ...")
+
+        ASCIIColors.info("- Selecting model ...")
         # Define the file types
         filetypes = [
             ("Model file", self.binding.file_extension),
@@ -990,12 +989,12 @@ class LoLLMsWebUI(LoLLMsAPPI):
 
         # Open the file dialog
         file_path = askopenfilename(filetypes=filetypes)
-        
+
         file_path = Path(file_path)
         #
-        with open(str(self.lollms_paths.personal_models_path/self.config.binding_name/(file_path.stem+".reference")),"w") as f:
+        with open(str(self.lollms_paths.personal_models_path/self.config.binding_name / f"{file_path.stem}.reference"), "w") as f:
             f.write(file_path)
-        
+
         return jsonify({
                         "status": True
                     })
@@ -1007,7 +1006,7 @@ class LoLLMsWebUI(LoLLMsAPPI):
         except Exception as e:
             print(f"Error occurred while parsing JSON: {e}")
             return jsonify({"status":False, 'error':str(e)})
-        if not 'name' in data:
+        if 'name' not in data:
             data['name']=self.config.personalities[self.config["active_personality_id"]]
         try:
             personality_path = lollms_paths.personalities_zoo_path / data['name']
@@ -1162,12 +1161,12 @@ class LoLLMsWebUI(LoLLMsAPPI):
         
     def get_lollms_version(self):
         version = pkg_resources.get_distribution('lollms').version
-        ASCIIColors.yellow("Lollms version : "+ version)
+        ASCIIColors.yellow(f"Lollms version : {version}")
         return jsonify({"version":version})
 
     def get_lollms_webui_version(self):
         version = __version__
-        ASCIIColors.yellow("Lollms webui version : "+ version)
+        ASCIIColors.yellow(f"Lollms webui version : {version}")
         return jsonify({"version":version})
     
     
@@ -1260,41 +1259,34 @@ class LoLLMsWebUI(LoLLMsAPPI):
             self.config["personalities"].remove(f"{language}/{category}/{name}")
             if self.config["active_personality_id"]>=index:
                 self.config["active_personality_id"]=0
-            if len(self.config["personalities"])>0:
-                self.mounted_personalities = self.rebuild_personalities()
-                self.personality = self.mounted_personalities[self.config["active_personality_id"]]
-            else:
+            if len(self.config["personalities"]) <= 0:
                 self.personalities = ["english/generic/lollms"]
-                self.mounted_personalities = self.rebuild_personalities()
-                self.personality = self.mounted_personalities[self.config["active_personality_id"]]
+            self.mounted_personalities = self.rebuild_personalities()
+            self.personality = self.mounted_personalities[self.config["active_personality_id"]]
             self.apply_settings()
             ASCIIColors.success("ok")
             return jsonify({
                         "status": True,
                         "personalities":self.config["personalities"],
                         "active_personality_id":self.config["active_personality_id"]
-                        })         
+                        })
         except:
             ASCIIColors.error(f"nok : Personality not found @ {language}/{category}/{name}")
             return jsonify({"status": False, "error":"Couldn't unmount personality"})         
          
     def get_active_personality_settings(self):
         print("- Retreiving personality settings")
-        if self.personality.processor is not None:
-            if hasattr(self.personality.processor,"personality_config"):
-                return jsonify(self.personality.processor.personality_config.config_template.template)
-            else:
-                return jsonify({})        
+        if self.personality.processor is None:
+            return jsonify({})
+        if hasattr(self.personality.processor,"personality_config"):
+            return jsonify(self.personality.processor.personality_config.config_template.template)
         else:
             return jsonify({})               
 
     def get_active_binding_settings(self):
         print("- Retreiving binding settings")
-        if self.binding is not None:
-            if hasattr(self.binding,"binding_config"):
-                return jsonify(self.binding.binding_config.config_template.template)
-            else:
-                return jsonify({})        
+        if self.binding is not None and hasattr(self.binding, "binding_config"):
+            return jsonify(self.binding.binding_config.config_template.template)
         else:
             return jsonify({})  
         
@@ -1307,14 +1299,13 @@ class LoLLMsWebUI(LoLLMsAPPI):
         except Exception as e:
             print(f"Error occurred while parsing JSON: {e}")
             return
-        
-        if self.personality.processor is not None:
-            if hasattr(self.personality.processor,"personality_config"):
-                self.personality.processor.personality_config.update_template(data)
-                self.personality.processor.personality_config.config.save_config()
-                return jsonify({'status':True})
-            else:
-                return jsonify({'status':False})        
+
+        if self.personality.processor is None:
+            return jsonify({'status':False})
+        if hasattr(self.personality.processor,"personality_config"):
+            self.personality.processor.personality_config.update_template(data)
+            self.personality.processor.personality_config.config.save_config()
+            return jsonify({'status':True})
         else:
             return jsonify({'status':False})            
 
@@ -1327,33 +1318,26 @@ class LoLLMsWebUI(LoLLMsAPPI):
         except Exception as e:
             print(f"Error occurred while parsing JSON: {e}")
             return
-        
-        if self.binding is not None:
-            if hasattr(self.binding,"binding_config"):
-                for entry in data:
-                    if entry["type"]=="list" and type(entry["value"])==str:
-                        try:
-                            v = json.loads(entry["value"])
-                        except:
-                            v= ""
-                        if type(v)==list:
-                            entry["value"] = v
-                        else:
-                            entry["value"] = [entry["value"]]
-                self.binding.binding_config.update_template(data)
-                self.binding.binding_config.config.save_config()
-                self.binding = None
-                self.model = None
-                for per in self.mounted_personalities:
-                    per.model = None
-                gc.collect()
-                self.binding= BindingBuilder().build_binding(self.config, self.lollms_paths)
-                self.model = self.binding.build_model()
-                return jsonify({'status':True})
-            else:
-                return jsonify({'status':False})        
-        else:
-            return jsonify({'status':False})     
+
+        if self.binding is None or not hasattr(self.binding, "binding_config"):
+            return jsonify({'status':False})
+        for entry in data:
+            if entry["type"]=="list" and type(entry["value"])==str:
+                try:
+                    v = json.loads(entry["value"])
+                except:
+                    v= ""
+                entry["value"] = v if type(v)==list else [entry["value"]]
+        self.binding.binding_config.update_template(data)
+        self.binding.binding_config.config.save_config()
+        self.binding = None
+        self.model = None
+        for per in self.mounted_personalities:
+            per.model = None
+        gc.collect()
+        self.binding= BindingBuilder().build_binding(self.config, self.lollms_paths)
+        self.model = self.binding.build_model()
+        return jsonify({'status':True})     
     
          
     def get_personality_settings(self):
@@ -1378,11 +1362,10 @@ class LoLLMsWebUI(LoLLMsAPPI):
                                     self.config,
                                     model=self.model,
                                     run_scripts=True)
-        if personality.processor is not None:
-            if hasattr(personality.processor,"personality_config"):
-                return jsonify(personality.processor.personality_config.config_template.template)
-            else:
-                return jsonify({})        
+        if personality.processor is not None and hasattr(
+            personality.processor, "personality_config"
+        ):
+            return jsonify(personality.processor.personality_config.config_template.template)
         else:
             return jsonify({})       
 
@@ -1412,11 +1395,15 @@ class LoLLMsWebUI(LoLLMsAPPI):
         try:
             ASCIIColors.info("Creating a model reference")
             path = Path(request.path)
-            ref_path=self.lollms_paths.personal_models_path/self.config.binding_name/(path.name+".reference")
+            ref_path = (
+                self.lollms_paths.personal_models_path
+                / self.config.binding_name
+                / f"{path.name}.reference"
+            )
             with open(ref_path,"w") as f:
                 f.write(str(path))
 
-            return jsonify({"status": True})   
+            return jsonify({"status": True})
         except Exception as ex:
             ASCIIColors.error(ex)
             trace_exception(ex)
@@ -1493,10 +1480,9 @@ class LoLLMsWebUI(LoLLMsAPPI):
         discussion_id = request.args.get("id")
         if self.connections[client_id]["current_discussion"] is None:
             return jsonify({"status": False,"message":"No discussion is selected"})
-        else:
-            new_rank = self.connections[client_id]["current_discussion"].delete_message(discussion_id)
-            ASCIIColors.yellow("Message deleted")
-            return jsonify({"status":True,"new_rank": new_rank})
+        new_rank = self.connections[client_id]["current_discussion"].delete_message(discussion_id)
+        ASCIIColors.yellow("Message deleted")
+        return jsonify({"status":True,"new_rank": new_rank})
 
 
 

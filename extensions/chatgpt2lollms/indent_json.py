@@ -9,7 +9,9 @@ def indent_json_file(input_file, output_file=None, indent=4):
 
     # Determine the output file path
     if output_file is None:
-        output_file = input_file.with_stem(input_file.stem + '_indented' + input_file.suffix)
+        output_file = input_file.with_stem(
+            f'{input_file.stem}_indented{input_file.suffix}'
+        )
 
     # Write the indented JSON to the output file
     with open(output_file, 'w') as file:

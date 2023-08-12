@@ -24,8 +24,7 @@ def convert_discussions(input_data, flatten=False):
             if create_time is not None:
                 created_at = datetime.fromtimestamp(create_time).strftime("%Y-%m-%d %H:%M:%S")
 
-            content = message['content'].get('parts', [''])[0]
-            if content:
+            if content := message['content'].get('parts', [''])[0]:
                 parent = i - 1 if flatten and i > 0 else mapping[message_ids[i]]['parent'] or -1
 
                 converted_message = {
